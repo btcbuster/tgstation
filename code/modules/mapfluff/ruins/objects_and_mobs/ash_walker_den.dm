@@ -48,7 +48,7 @@
 	for(var/mob/living/offeredmob in view(src, 1)) //Only for corpse right next to/on same tile
 		if(offeredmob.loc == src)
 			continue //Ashwalker Revive in Progress...
-		if(offeredmob.stat)
+		if(IS_UNCONSCIOUS_OR_CRIT(offeredmob))
 			offeredmob.unequip_everything()
 
 			if(issilicon(offeredmob)) //no advantage to sacrificing borgs...
@@ -85,11 +85,9 @@
 			offeredmob.investigate_log("has been gibbed by the necropolis tendril.", INVESTIGATE_DEATHS)
 			offeredmob.gib(DROP_ALL_REMAINS)
 			atom_integrity = min(atom_integrity + max_integrity*0.05,max_integrity)//restores 5% hp of tendril
-			for(var/mob/living/L in view(src, 5))
-				if(L.mind?.has_antag_datum(/datum/antagonist/ashwalker))
-					L.add_mood_event("oogabooga", /datum/mood_event/sacrifice_good)
-				else
-					L.add_mood_event("oogabooga", /datum/mood_event/sacrifice_bad)
+			for(var/mob/living/living_thing in view(src, 5))
+				if(living_thing.mind?.has_antag_datum(/datum/antagonist/ashwalker))
+					living_thing.add_mood_event("tendril sacrifice", /datum/mood_event/sacrifice_good)
 			ashies.sacrifices_made++
 
 /obj/structure/lavaland/ash_walker/proc/remake_walker(mob/living/carbon/oldmob)

@@ -40,8 +40,8 @@
 	custom_price = PAYCHECK_LOWER * 8
 	fill_icon_thresholds = null
 	sound_vary = TRUE
-	pickup_sound = SFX_POT_PICKUP
-	drop_sound = SFX_POT_DROP
+	pickup_sound = /datum/sound_effect/pot_pickup
+	drop_sound = /datum/sound_effect/pot_drop
 
 	/// Max number of ingredients we can add
 	var/max_ingredients = 24
@@ -52,7 +52,6 @@
 	. = ..()
 	AddElement(/datum/element/cuffable_item)
 	RegisterSignal(src, COMSIG_ATOM_REAGENT_EXAMINE, PROC_REF(reagent_special_examine))
-	register_context()
 
 /obj/item/reagent_containers/cup/soup_pot/add_context(atom/source, list/context, obj/item/held_item, mob/user)
 	if(isnull(held_item))

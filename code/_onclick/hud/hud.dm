@@ -37,12 +37,6 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	///Assoc list of controller groups, associated with key string group name with value of the plane master controller ref
 	var/list/atom/movable/plane_master_controller/plane_master_controllers = list()
 
-	/// Think of multiz as a stack of z levels. Each index in that stack has its own group of plane masters
-	/// This variable is the plane offset our mob/client is currently "on"
-	/// We use it to track what we should show/not show
-	/// Goes from 0 to the max (z level stack size - 1)
-	var/current_plane_offset = 0
-
 	/// UI for screentips that appear when you mouse over things
 	/// Stored directly as it is used in very hot MouseEntered code
 	var/atom/movable/screen/screentip/screentip_text = null
@@ -91,9 +85,8 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 /datum/hud/New(mob/owner)
 	mymob = owner
 
-	if (!ui_style)
-		// will fall back to the default if any of these are null
-		ui_style = ui_style2icon(owner.client?.prefs?.read_preference(/datum/preference/choiced/ui_style))
+	// will fall back to the default if any of these are null
+	ui_style ||= ui_style2icon(owner.client?.prefs?.read_preference(/datum/preference/choiced/ui_style))
 
 	add_screen_object(/atom/movable/screen/button_palette, HUD_MOB_TOGGLE_PALETTE)
 	add_screen_object(/atom/movable/screen/palette_scroll/down, HUD_MOB_PALETTE_DOWN)
@@ -103,9 +96,10 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	main_group.attach_to(src)
 
 	var/datum/preferences/preferences = owner?.client?.prefs
-	screentip_color = preferences?.read_preference(/datum/preference/color/screentip_color)
-	screentips_enabled = preferences?.read_preference(/datum/preference/choiced/enable_screentips)
-	screentip_images = preferences?.read_preference(/datum/preference/toggle/screentip_images)
+	if(preferences)
+		screentip_color = preferences.read_preference(/datum/preference/color/screentip_color)
+		screentips_enabled = preferences.read_preference(/datum/preference/choiced/enable_screentips)
+		screentip_images = preferences.read_preference(/datum/preference/toggle/screentip_images)
 	screentip_text = add_screen_object(/atom/movable/screen/screentip, HUD_MOB_SCREENTIP)
 
 	for(var/mytype in subtypesof(/atom/movable/plane_master_controller))
@@ -226,9 +220,9 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	if(should_sight_scale(new_sight) == should_sight_scale(old_sight))
 		return
 
-	for(var/group_key in master_groups)
-		var/datum/plane_master_group/group = master_groups[group_key]
-		group.build_planes_offset(src, current_plane_offset)
+	for(var/group_key, _group in master_groups)
+		var/datum/plane_master_group/group = _group
+		group.refresh_planes_offset()
 
 /datum/hud/proc/should_use_scale()
 	return should_sight_scale(mymob.sight)
@@ -238,21 +232,10 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 
 /datum/hud/proc/eye_z_changed(atom/eye)
 	SIGNAL_HANDLER
-	update_parallax_pref() // If your eye changes z level, so should your parallax prefs
 	var/turf/eye_turf = get_turf(eye)
 	if(!eye_turf)
 		return
 	SEND_SIGNAL(src, COMSIG_HUD_Z_CHANGED, eye_turf.z)
-	var/new_offset = GET_TURF_PLANE_OFFSET(eye_turf)
-	if(current_plane_offset == new_offset)
-		return
-	var/old_offset = current_plane_offset
-	current_plane_offset = new_offset
-
-	SEND_SIGNAL(src, COMSIG_HUD_OFFSET_CHANGED, old_offset, new_offset)
-	for(var/group_key in master_groups)
-		var/datum/plane_master_group/group = master_groups[group_key]
-		group.build_planes_offset(src, new_offset)
 
 /datum/hud/proc/on_plane_increase(datum/source, old_max_offset, new_max_offset)
 	SIGNAL_HANDLER
@@ -262,30 +245,29 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 
 /// Creates the required plane masters to fill out new z layers (because each "level" of multiz gets its own plane master set)
 /datum/hud/proc/build_plane_groups(starting_offset, ending_offset)
-	for(var/group_key in master_groups)
-		var/datum/plane_master_group/group = master_groups[group_key]
+	for(var/group_key, _group in master_groups)
+		var/datum/plane_master_group/group = _group
 		group.build_plane_masters(starting_offset, ending_offset)
 
 /// Returns the plane master that matches the input plane from the passed in group
-/datum/hud/proc/get_plane_master(plane, group_key = PLANE_GROUP_MAIN)
-	var/plane_key = "[plane]"
+/datum/hud/proc/get_plane_master(plane, group_key = PLANE_GROUP_MAIN) as /atom/movable/screen/plane_master
 	var/datum/plane_master_group/group = master_groups[group_key]
-	return group.plane_masters[plane_key]
+	return group.plane_masters[plane]
 
 /// Returns a list of all plane masters that match the input true plane, drawn from the passed in group (ignores z layer offsets)
-/datum/hud/proc/get_true_plane_masters(true_plane, group_key = PLANE_GROUP_MAIN)
+/datum/hud/proc/get_true_plane_masters(true_plane, group_key = PLANE_GROUP_MAIN) as /list
 	var/list/atom/movable/screen/plane_master/masters = list()
 	for(var/plane in TRUE_PLANE_TO_OFFSETS(true_plane))
 		masters += get_plane_master(plane, group_key)
 	return masters
 
 /// Returns all the planes belonging to the passed in group key
-/datum/hud/proc/get_planes_from(group_key)
+/datum/hud/proc/get_planes_from(group_key) as /alist
 	var/datum/plane_master_group/group = master_groups[group_key]
 	return group.plane_masters
 
 /// Returns the corresponding plane group datum if one exists
-/datum/hud/proc/get_plane_group(key)
+/datum/hud/proc/get_plane_group(key) as /datum/plane_master_group
 	return master_groups[key]
 
 ///Creates the mob's visible HUD, returns FALSE if it can't, TRUE if it did.
@@ -300,7 +282,6 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 /mob/proc/set_hud_used(datum/hud/new_hud)
 	hud_used = new_hud
 	new_hud.build_action_groups()
-
 
 /**
  * Shows this hud's hud to some mob
@@ -322,6 +303,7 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	// I'm sorry
 	screenmob.client.clear_screen()
 	screenmob.client.apply_clickcatcher()
+	screenmob.client.apply_parallax()
 
 	var/display_hud_version = version
 	if (!display_hud_version) // If 0 or blank, display the next hud version
@@ -373,7 +355,7 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 				screenmob.client.screen += group_info
 
 			// Hands are apart of the static group but still should be presetn in the reduced mode
-			for (var/i in 1 to length(mymob.held_items))
+			for (var/i in 1 to mymob.get_num_hand_slots())
 				var/atom/movable/screen/hand = screen_objects[HUD_KEY_HAND_SLOT(i)]
 				if (hand)
 					screenmob.client.screen += hand
@@ -393,11 +375,6 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	reorganize_alerts(screenmob)
 	screenmob.reload_fullscreen()
 
-	if(screenmob == mymob)
-		update_parallax_pref()
-	else
-		viewmob.hud_used.update_parallax_pref()
-
 	update_reuse(screenmob)
 
 	// ensure observers get an accurate and up-to-date view
@@ -414,8 +391,8 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	return TRUE
 
 /datum/hud/proc/plane_masters_update()
-	for(var/group_key in master_groups)
-		var/datum/plane_master_group/group = master_groups[group_key]
+	for(var/group_key, _group in master_groups)
+		var/datum/plane_master_group/group = _group
 		// Plane masters are always shown to OUR mob, never to observers
 		group.refresh_hud()
 
@@ -426,17 +403,12 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	var/mob/screenmob = viewmob || mymob
 	inventory_update(screenmob)
 
-/datum/hud/new_player/show_hud(version = 0, mob/viewmob)
-	. = ..()
-	if(.)
-		show_station_trait_buttons()
-
 /datum/hud/proc/inventory_update(mob/viewer)
 	if (isnull(mymob))
 		return
 
-	for (var/slot_id in inventory_slots)
-		var/datum/inventory_slot/slot = inventory_slots[slot_id]
+	for (var/slot_id, _slot in inventory_slots)
+		var/datum/inventory_slot/slot = _slot
 		if (!isnull(slot))
 			slot.update_inventory_slot(src, mymob)
 
@@ -477,21 +449,13 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 			continue
 		show_to.client?.screen += reuse
 
-//Triggered when F12 is pressed (Unless someone changed something in the DMF)
-/mob/verb/button_pressed_F12()
-	set name = "F12"
-	set hidden = TRUE
-
-	if(hud_used && client)
-		hud_used.show_hud() //Shows the next hud preset
-		to_chat(usr, span_info("Switched HUD mode. Press F12 to toggle."))
-	else
-		to_chat(usr, span_warning("This mob type does not use a HUD."))
-
 /// Rebuilds our mob's hand slot screen elements
 /datum/hud/proc/build_hand_slots(update_hud = FALSE)
+	// Clean up existing hand slot objects
+	for (var/atom/movable/screen/inventory/hand/hand in screen_groups[HUD_GROUP_STATIC])
+		remove_screen_object(hand, FALSE)
 
-	for(var/i in 1 to length(mymob.held_items))
+	for(var/i in 1 to mymob.get_num_hand_slots())
 		var/atom/movable/screen/inventory/hand/hand_box = add_screen_object(/atom/movable/screen/inventory/hand, HUD_KEY_HAND_SLOT(i), HUD_GROUP_STATIC, ui_style, ui_hand_position(i))
 		hand_box.name = mymob.get_held_index_name(i)
 		hand_box.icon_state = "hand_[mymob.held_index_to_dir(i)]"
@@ -664,7 +628,7 @@ GLOBAL_LIST_INIT(available_ui_styles, list(
 	palette_actions = new(src)
 	floating_actions = list()
 	for(var/datum/action/action as anything in mymob.actions)
-		var/atom/movable/screen/movable/action_button/button = action.viewers[src]
+		var/atom/movable/screen/movable/action_button/button = LAZYACCESS(action.viewers, src)
 		if(!button)
 			action.ShowTo(mymob)
 		else

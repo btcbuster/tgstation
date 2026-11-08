@@ -2,7 +2,7 @@
 //Food
 
 // Eating stuff
-/// From datum/component/edible/proc/TakeBite: (atom/owner)
+/// From datum/component/edible/proc/TakeBite: (atom/owner, foodtypes)
 #define COMSIG_LIVING_EAT_FOOD "food_bit"
 /// From datum/component/edible/proc/TakeBite: (mob/living/eater, mob/feeder, bitecount, bitesize)
 #define COMSIG_FOOD_EATEN "food_eaten"
@@ -10,8 +10,6 @@
 /// From datum/component/edible/proc/AttemptEat: (mob/living/eater, mob/feeder)
 #define COMSIG_FOOD_ATTEMPT_EAT "food_attempt_eat"
 	// #define BLOCK_EAT_ATTEMPT (1<<0)
-/// From base of datum/component/edible/on_entered: (mob/crosser, bitecount)
-#define COMSIG_FOOD_CROSSED "food_crossed"
 /// From base of Component/edible/On_Consume: (mob/living/eater, mob/living/feeder)
 #define COMSIG_FOOD_CONSUMED "food_consumed"
 /// called when a pill is injested (mob/living/eater, mob/living/feeder)
@@ -39,10 +37,10 @@
 	#define COMPONENT_MICROWAVE_SUCCESS (1<<0)
 	/// Returned on "failure" - an item was produced but it was the default fail recipe
 	#define COMPONENT_MICROWAVE_BAD_RECIPE (1<<1)
-///called on item when created through microwaving (): (obj/machinery/microwave/M, cooking_efficiency)
-#define COMSIG_ITEM_MICROWAVE_COOKED "microwave_cooked"
-///called on the ingredient through microwawing: (result)
-#define COMSIG_ITEM_MICROWAVE_COOKED_FROM "item_microwave_cooked_from"
+///called on the ingredient through microwawing: (result, cooking_efficiency)
+#define COMSIG_ITEM_MICROWAVE_COOKED "item_microwave_cooked_from"
+///called on item when created through microwaving (): (coooked_from, cooking_efficiency)
+#define COMSIG_ITEM_MICROWAVE_COOKED_RESULT "microwave_cooked"
 
 // Grilling foods (griddle, grill, and bonfire)
 ///Called when an object is placed onto a griddle
@@ -78,6 +76,9 @@
 #define COMSIG_ITEM_BAKED "item_bake_completed"
 ///Sent to the newly spawned object when it's baked in an oven.
 #define COMSIG_ITEM_BAKED_RESULT "item_baked_result"
+
+///When an object is used in a food processor recipe: (atom/movable/result, datum/food_processor_process/recipe)
+#define SIGNAL_USED_IN_FOOD_PROCESSOR "movable_used_in_food_processor"
 
 /// From /datum/element/basic_eating/finish_eating() : (mob/living/eater, mob/living/feeder)
 #define COMSIG_ITEM_EATEN_BY_BASIC_MOB "item_eaten_by_basic_mob"
